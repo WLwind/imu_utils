@@ -13,6 +13,7 @@
 #include <geometry_msgs/Vector3Stamped.h>
 #include <iostream>
 #include <mutex>
+#include <fstream>
 #include <opencv2/opencv.hpp>
 #include <queue>
 #include <ros/ros.h>
@@ -36,6 +37,7 @@ std::string data_save_path;
 void
 imu_callback( const sensor_msgs::ImuConstPtr& imu_msg )
 {
+    static int minutes(0);
     //    m_buf.lock( );
     //    imu_buf.push( imu_msg );
     //    m_buf.unlock( );
@@ -54,9 +56,16 @@ imu_callback( const sensor_msgs::ImuConstPtr& imu_msg )
     }
     else
     {
-        double time_min = ( time - start_t ) / 60;
-        if ( time_min > max_time_min )
+        int time_min = ( time - start_t ) / 60;
+        if ( time_min >= max_time_min )
+        {
             end = true;
+        }
+        else if (time_min > minutes)
+        {
+            minutes = time_min;
+            std::cout << "data collection process: " << minutes * 100 / max_time_min << "%" << std::endl;
+        }
     }
 }
 
@@ -100,7 +109,7 @@ writeData3( const std::string sensor_name,
     out_y << std::setprecision( 10 );
     out_z << std::setprecision( 10 );
 
-    for ( int index = 0; index < gyro_ts_x.size( ); ++index )
+    for (size_t index = 0; index < gyro_ts_x.size( ); ++index)
     {
         out_t << gyro_ts_x[index] << '\n';
         out_x << gyro_d_x[index] << '\n';
@@ -218,10 +227,10 @@ main( int argc, char** argv )
     max_time_min   = ros_utils::readParam< int >( n, "max_time_min" );
     max_cluster    = ros_utils::readParam< int >( n, "max_cluster" );
 
-    ros::Subscriber sub_imu = n.subscribe( IMU_TOPIC, //
-                                           20000000,
-                                           imu_callback,
-                                           ros::TransportHints( ).tcpNoDelay( ) );
+    ros::Subscriber sub_imu = ros::NodeHandle().subscribe( IMU_TOPIC, //
+                                                          20000000,
+                                                          imu_callback,
+                                                          ros::TransportHints( ).tcpNoDelay( ) );
     //    ros::Publisher pub = n.advertise< geometry_msgs::Vector3Stamped >( ALLAN_TOPIC,
     //    2000 );
 
@@ -235,7 +244,7 @@ main( int argc, char** argv )
     ros::Rate loop( 100 );
 
     //    ros::spin( );
-    while ( !end )
+    while ( !end && ros::ok() )
     {
         loop.sleep( );
         ros::spinOnce( );
